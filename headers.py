@@ -15,10 +15,10 @@ def get_headers(config: Config) -> dict[str, str | bytes]:
     user_agent = user_agents.parse(config.request.user_agent)
 
     browser = cast(user_agents.parsers.Browser, user_agent.browser)
-    browser_family = cast(str, browser.family)
+    browser_family = cast(str, browser.family).lower()
 
     def get_sec_ch_ua_dict() -> dict[str, str]:
-        if browser_family.lower() not in chromium_browsers_dict:
+        if browser_family not in chromium_browsers_dict:
             return {}
 
         browser_version = cast(tuple[int], browser.version)[0]

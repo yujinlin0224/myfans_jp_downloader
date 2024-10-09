@@ -1,6 +1,11 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel as BaseBasicModel
+from pydantic import ConfigDict
+
+
+class BaseModel(BaseBasicModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class PaginationModel(BaseModel):
@@ -14,7 +19,7 @@ class PagedDataModel[T](BaseModel):
     pagination: PaginationModel
 
 
-class BasicUserModel(BaseModel):
+class UserBasicModel(BaseModel):
     about: str
     active: bool
     avatar_url: str
@@ -26,18 +31,18 @@ class BasicUserModel(BaseModel):
     username: str
 
 
-class SimplePostUserModel(BasicUserModel):
+class UserInPostFromListModel(UserBasicModel):
     is_official_creator: bool
     is_official: bool
     label: Optional[str]
     current_back_number_plan: Optional[str]
 
 
-class PostUserModel(BasicUserModel):
-    cant_receive_message: bool
+class UserInPostModel(UserBasicModel):
+    cant_receive_message: Optional[bool] = None  # FIXME
 
 
-class UserModel(SimplePostUserModel, PostUserModel):
+class UserModel(UserInPostFromListModel, UserInPostModel):
     back_number_post_images_count: int
     back_number_post_videos_count: int
     followers_count: int
@@ -67,18 +72,18 @@ class AccountModel(UserModel):
     comment_permission: str
     disallow_receive_message: bool
     email: str
-    full_name: str
+    full_name: Optional[str]
     has_hd_access: bool
     has_spending_cap: bool
     is_confirmed: bool
     is_creater: bool
     personal_info_status: str
-    phone_number: str
+    phone_number: Optional[str]
     phone_number_verified: bool
     postable_status: str
 
 
-class BasicPostPlanModel(BaseModel):
+class PlanBasicModel(BaseModel):
     id: str
     product_name: str
     monthly_price: int
@@ -87,22 +92,25 @@ class BasicPostPlanModel(BaseModel):
     disallow_new_subscriber: bool
 
 
-class SimplePostPlanModel(BasicPostPlanModel):
+class PlanInPostFromListModel(PlanBasicModel):
     active_discount: Optional[str]
 
 
-class PostPlanModel(BasicPostPlanModel):
+class PlanInPostModel(PlanBasicModel):
     description: str
     flag: Optional[str]
-    plan_discounts: Optional[str]
-    user: BasicUserModel
-
-
-class PlanModel(SimplePostPlanModel, PostPlanModel):
     posts_count: int
-    active_user_subscriptions_count: int
+    user: UserInPostModel
+
+
+class PlanModel(PlanInPostFromListModel, PlanInPostModel):
     is_back_number: bool
     welcome_message: str
+    plan_discounts: Optional[str]
+
+
+class PlanInSubscriptionModel(PlanModel):
+    active_user_subscriptions_count: int
     message_room_id: Optional[str]
 
 
@@ -121,7 +129,7 @@ class SubscriptionModel(BaseModel):
     web_path: str
     sort: Optional[str]
     contracted_price: int
-    plan: PlanModel
+    plan: PlanInSubscriptionModel
 
 
 class PostSinglePlanModel(BaseModel):
@@ -143,8 +151,8 @@ class PostMetadataVideoModel(BaseModel):
 
 
 class PostMetadataModel(BaseModel):
-    image: Optional[PostMetadataImageModel] = None
-    video: Optional[PostMetadataVideoModel] = None
+    image: Optional[PostMetadataImageModel] = None  # FIXME
+    video: Optional[PostMetadataVideoModel] = None  # FIXME
 
 
 class PostPostImageModel(BaseModel):
@@ -191,7 +199,7 @@ class PostTagModel(BaseModel):
     posts_count: int
 
 
-class BasicPostModel(BaseModel):
+class PostBasicModel(BaseModel):
     id: str
     kind: str
     status: str
@@ -211,28 +219,29 @@ class BasicPostModel(BaseModel):
     thumbnail_url: str
 
 
-class SimplePostModel(BasicPostModel):
+class PostFromListModel(PostBasicModel):
     humanized_publish_start_at: str
-    user: SimplePostUserModel
+    user: UserInPostFromListModel
     post_images: list[PostPostImageModel]
     publish_start_at: Optional[str]
     plan: Optional[PlanModel]
     current_single_plan: Optional[PostCurrentSinglePlanModel]
-    plans: list[SimplePostPlanModel]
+    plans: list[PlanInPostFromListModel]
     video_processing: Optional[bool]
     video_duration: Optional[PostVideoDurationModel]
     free: bool
     limited: bool
 
 
-class PostModel(BasicPostModel):
+class PostModel(PostBasicModel):
     comments_count: int
     bookmarks_count: int
     deleted_at: Optional[str]
-    user: PostUserModel
+    user: UserInPostModel
     post_image: PostPostImageModel
     videos: PostVideosModel
     images: list[PostImageModel]
+    plans: list[PlanInPostModel]
     commentable: bool
     main_video_info: Optional[PostMainVideoInfoModel]
     single_plan: Optional[PostSinglePlanModel]

@@ -1,3 +1,5 @@
+from typing import Literal
+
 import requests
 from pydantic import TypeAdapter
 
@@ -27,11 +29,11 @@ class Requester:
 
     def get_plan_posts(
         self, id: str, per_page: int, page: int
-    ) -> models.PagedDataModel[models.SimplePostModel]:
+    ) -> models.PagedDataModel[models.PostFromListModel]:
         url = urls.get_plan_posts.format(id=id, per_page=per_page, page=page)
         resp = self.session.get(url)
         resp.raise_for_status()
-        return models.PagedDataModel[models.SimplePostModel](**resp.json())
+        return models.PagedDataModel[models.PostFromListModel](**resp.json())
 
     def get_post(self, id: str) -> models.PostModel:
         url = urls.get_post.format(id=id)
@@ -51,22 +53,28 @@ class Requester:
         resp.raise_for_status()
         return models.PostVideosModel(**resp.json())
 
-    def get_user(self, id: str) -> models.UserModel:
-        url = urls.get_user.format(id=id)
+    def get_user(
+        self, id_or_username: str, by: Literal["id"] | Literal["username"]
+    ) -> models.UserModel:
+        match by:
+            case "id":
+                url = urls.get_user.format(id=id_or_username)
+            case "username":
+                url = urls.get_user_by_username.format(username=id_or_username)
         resp = self.session.get(url)
         resp.raise_for_status()
         return models.UserModel(**resp.json())
 
-    def get_user_by_username(self, username: str) -> models.UserModel:
-        url = urls.get_user_by_username.format(username=username)
+    def get_user_plans(self, id: str) -> list[models.PlanModel]:
+        url = urls.get_user_plans.format(id=id)
         resp = self.session.get(url)
         resp.raise_for_status()
-        return models.UserModel(**resp.json())
+        return TypeAdapter(list[models.PlanModel]).validate_python(resp.json())
 
     def get_user_posts(
         self, id: str, per_page: int, page: int
-    ) -> models.PagedDataModel[models.SimplePostModel]:
+    ) -> models.PagedDataModel[models.PostFromListModel]:
         url = urls.get_user_posts.format(id=id, per_page=per_page, page=page)
         resp = self.session.get(url)
         resp.raise_for_status()
-        return models.PagedDataModel[models.SimplePostModel](**resp.json())
+        return models.PagedDataModel[models.PostFromListModel](**resp.json())

@@ -14,6 +14,8 @@ class Requester:
         self.config = config
         self.session = requests.Session()
         self.session.headers = get_headers(config)
+        if config.request.proxy_url is not None and config.request.proxy_url != "":
+            self.session.proxies.update({"https": config.request.proxy_url})
 
     def get_account(self) -> models.AccountModel:
         url = urls.get_account

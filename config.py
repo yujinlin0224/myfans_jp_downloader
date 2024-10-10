@@ -1,10 +1,12 @@
 import os
+from collections.abc import Iterable
 from os import path
 from typing import Any, Optional
 
 import requests
-import yaml
+import toml
 from pydantic import BaseModel
+from toml import TomlEncoder
 
 LATEST_USER_AGENTS_API_URL = "https://jnrbsn.github.io/user-agents/user-agents.json"
 
@@ -22,14 +24,22 @@ def get_latest_windows_chrome_user_agent() -> str:
 
 
 class RequestConfig(BaseModel):
+    proxy_url: Optional[str] = None
     user_agent: str = get_latest_windows_chrome_user_agent()
+    interval_range: tuple[int, int] = (1, 5)
+    timeout: int = 20
+    max_retry_times: int = 10
+    retry_interval_range: tuple[int, int] = (1, 5)
 
 
 class AuthConfig(BaseModel):
+    # username: Optional[str] = ""
+    # password: Optional[str] = ""
     token: str = ""
 
 
 class DownloadConfig(BaseModel):
+    downloads_dir_path: str = "myfans.jp downloads"
     download_account_files: bool = False
     account_dir_path: str = "."
     account_data_filename: Optional[str] = "account.json"
@@ -41,7 +51,7 @@ class DownloadConfig(BaseModel):
     user_plans_data_filename: Optional[str] = "user_plans.json"
     user_about_text_filename: Optional[str] = "user_about.txt"
     post_dir_path: str = (
-        "[<post.user.username>] <post.user.name>/[<post.published_at:%Y.%m.%d>] <post.id> (<post_from_list.free:free,paid>,<post_from_list.limited:limited,unlocked>)"
+        "[<post.user.username>] <post.user.name>/[<post.published_at:%Y.%m.%d>] <post.id> (<post_from_list.free:free,paid>,<post_from_list.visible:full,trial>)"
     )
     post_data_filename: Optional[str] = "post.json"
     post_from_list_data_filename: Optional[str] = "post_from_list.json"
@@ -56,10 +66,18 @@ class Config(BaseModel):
     download: DownloadConfig
 
 
+class ConfigTomlEncoder(TomlEncoder):  # type: ignore
+    def dump_list(self, v: Iterable[Any]) -> str:
+        retval = "["
+        retval += ", ".join(str(self.dump_value(u)) for u in v)
+        retval += "]"
+        return retval
+
+
 def init_config(raw_config: Optional[dict[str, Any]]) -> Config:
     if raw_config is None:
-        if path.exists("config.yaml"):
-            os.replace("config.yaml", "config.yaml.bak")
+        if path.exists("config.toml"):
+            os.replace("config.toml", "config.toml.bak")
         config = Config(
             request=RequestConfig(),
             auth=AuthConfig(),
@@ -68,16 +86,15 @@ def init_config(raw_config: Optional[dict[str, Any]]) -> Config:
     else:
         config = Config(**raw_config)
     config_dict = config.model_dump()
-    with open("config.yaml", "w") as f:
-        yaml.dump(config_dict, f)
+    with open("config.toml", "w") as f:
+        toml.dump(config_dict, f, encoder=ConfigTomlEncoder())
     return config
 
 
 def get_config() -> Config:
     try:
-        with open("config.yaml", "r") as f:
-            config_dict = yaml.safe_load(f)
+        with open("config.toml", "r") as f:
+            config_dict = toml.load(f)
         return init_config(config_dict)
-    except Exception as e:
-        print(e)
+    except Exception:
         return init_config(None)

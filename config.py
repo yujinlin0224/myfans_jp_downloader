@@ -26,10 +26,10 @@ def get_latest_windows_chrome_user_agent() -> str:
 class RequestConfig(BaseModel):
     proxy_url: Optional[str] = None
     user_agent: str = get_latest_windows_chrome_user_agent()
-    interval_range: tuple[int, int] = (1, 5)
-    timeout: int = 20
-    max_retry_times: int = 10
-    retry_interval_range: tuple[int, int] = (1, 5)
+    # interval_range: tuple[int, int] = (1, 5)
+    # timeout: int = 20
+    # max_retry_times: int = 10
+    # retry_interval_range: tuple[int, int] = (1, 5)
 
 
 class AuthConfig(BaseModel):
@@ -38,26 +38,37 @@ class AuthConfig(BaseModel):
     token: str = ""
 
 
-class DownloadConfig(BaseModel):
-    downloads_dir_path: str = "myfans.jp downloads"
-    download_account_files: bool = False
-    account_dir_path: str = "."
+class DownloadAccountConfig(BaseModel):
+    dir_path: str = "[<account.username>] <account.name> (account)"
     account_data_filename: Optional[str] = "account.json"
     account_subscriptions_data_filename: Optional[str] = "account_subscriptions.json"
     account_about_text_filename: Optional[str] = "account_about.txt"
-    download_user_files: bool = True
-    user_dir_path: str = "[<user.username>] <user.name>"
+
+
+class DownloadUserConfig(BaseModel):
+    dir_path: str = "[<user.username>] <user.name>"
     user_data_filename: Optional[str] = "user.json"
     user_plans_data_filename: Optional[str] = "user_plans.json"
     user_about_text_filename: Optional[str] = "user_about.txt"
-    post_dir_path: str = (
-        "[<post.user.username>] <post.user.name>/[<post.published_at:%Y.%m.%d>] <post.id> (<post_from_list.free:free,paid>,<post_from_list.visible:full,trial>)"
+
+
+class DownloadPostConfig(BaseModel):
+    dir_path: str = (
+        "[<post.user.username>] <post.user.name>/[<post.published_at:%Y.%m.%d>] [<post.id:.slice(8)>] [<post.kind>] <post.body:.slice(40).strip()> (<post_from_list.free:free,paid>,<post_from_list.visible:full,trial>)"
     )
     post_data_filename: Optional[str] = "post.json"
     post_from_list_data_filename: Optional[str] = "post_from_list.json"
     post_tags_data_filename: Optional[str] = "post_tags.json"
     post_videos_data_filename: Optional[str] = "post_videos.json"
     post_body_text_filename: Optional[str] = "post_body.txt"
+
+
+class DownloadConfig(BaseModel):
+    dir_path: str = "myfans.jp downloads"
+    need_scrape_account: bool = False
+    account: DownloadAccountConfig = DownloadAccountConfig()
+    user: DownloadUserConfig = DownloadUserConfig()
+    post: DownloadPostConfig = DownloadPostConfig()
 
 
 class Config(BaseModel):

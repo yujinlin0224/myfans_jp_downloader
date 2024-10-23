@@ -1,17 +1,34 @@
 import os
+import subprocess
 import sys
 from datetime import datetime
 from os import path
+from pathlib import Path
+from posixpath import join as urljoin
 from typing import Literal
 
 from pydantic import TypeAdapter
+from tqdm import tqdm
 
-import models
 from config import get_config
-from location import generate_location_from_template
+from location import LocationGetter
+from models import (
+    AccountModel,
+    PlanModel,
+    PostFromListModel,
+    PostModel,
+    PostTagModel,
+    PostVideoModel,
+    PostVideosModel,
+    SubscriptionModel,
+    UserModel,
+)
 from requester import Requester
 
 LAST_MODIFIED_PATTERN = "%a, %d %b %Y %H:%M:%S %Z"
+
+# TODO
+supported_video_resolutions = [240, 360, 480, 720, 1080, 1440, 2160]
 
 
 def download_image(requester: Requester, url: str, dir_path: str) -> None:
@@ -26,52 +43,68 @@ def download_image(requester: Requester, url: str, dir_path: str) -> None:
     os.utime(image_file_path, (access_time, modification_time))
 
 
-def download_account(
+def download_video(
     requester: Requester,
-) -> tuple[models.AccountModel, list[models.SubscriptionModel]]:
+    video_type: Literal["trial"] | Literal["main"],
+    video_index: int,
+    video: PostVideoModel,
+    dir_path: str,
+) -> None:
+    video_url_dirname = path.dirname(video.url)
+    video_url_stem = Path(video.url).stem
+    video_resolution = min(
+        r for r in [video.width, video.height] if r in supported_video_resolutions
+    )
+    video_url = urljoin(video_url_dirname, video_url_stem, f"{video_resolution}p.m3u8")
+    video_filename = f"[{video_type}.{video_index:02d}] [{video_url_stem[:8]}] ({video.resolution},{video.width}×{video.height}).mp4"
+    video_file_path = path.join(dir_path, video_filename)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                video_url,
+                "-c:v",
+                "copy",
+                "-c:a",
+                "copy",
+                "-loglevel",
+                "error",
+                video_file_path,
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=600,
+        )
+    except subprocess.CalledProcessError as e:
+        print(e.stderr.decode())
+
+
+def download_account(
+    requester: Requester, location_getter: LocationGetter
+) -> tuple[AccountModel, list[SubscriptionModel]]:
     account = requester.get_account()
     account_subscriptions = requester.get_account_subscriptions()
-    if not requester.config.download.download_account_files:
-        return account, account_subscriptions
+    location_getter.update_data_dict("account", account)
+    location_getter.update_data_dict("account_subscriptions", account_subscriptions)
 
-    dir_path = generate_location_from_template(
-        requester.config.download.account_dir_path,
-        account,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    dir_path = path.join(
-        requester.config.download.downloads_dir_path,
-        dir_path,
-    )
+    dir_path = location_getter.get_account_dir_path()
     if not path.exists(dir_path):
         os.makedirs(dir_path)
 
-    if requester.config.download.account_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.account_data_filename), "w"
-        ) as f:
+    conf = requester.config.download.account
+    if (n := conf.account_data_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(account.model_dump_json())
-    if requester.config.download.account_subscriptions_data_filename is not None:
-        with open(
-            path.join(
-                dir_path, requester.config.download.account_subscriptions_data_filename
-            ),
-            "wb",
-        ) as f:
+    if (n := conf.account_subscriptions_data_filename) is not None:
+        with open(path.join(dir_path, n), "wb") as f:
             f.write(
-                TypeAdapter(list[models.SubscriptionModel]).dump_json(
-                    account_subscriptions
-                )
+                TypeAdapter(list[SubscriptionModel]).dump_json(account_subscriptions)
             )
-    if requester.config.download.account_about_text_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.account_about_text_filename),
-            "w",
-        ) as f:
+    if (n := conf.account_about_text_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(account.about)
 
     image_urls = {
@@ -90,44 +123,27 @@ def download_user(
     requester: Requester,
     id_or_username: str,
     by: Literal["id"] | Literal["username"],
-    account: models.AccountModel,
-) -> tuple[models.UserModel, list[models.PlanModel]]:
+    location_getter: LocationGetter,
+) -> tuple[UserModel, list[PlanModel]]:
     user = requester.get_user(id_or_username, by)
     user_plans = requester.get_user_plans(user.id)
+    location_getter.update_data_dict("user", user)
+    location_getter.update_data_dict("user_plans", user_plans)
 
-    dir_path = generate_location_from_template(
-        requester.config.download.user_dir_path,
-        account,
-        user,
-        None,
-        None,
-        None,
-        None,
-    )
-    dir_path = path.join(
-        requester.config.download.downloads_dir_path,
-        dir_path,
-    )
+    dir_path = location_getter.get_user_dir_path()
     if not path.exists(dir_path):
         os.makedirs(dir_path)
 
-    if requester.config.download.user_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.user_data_filename), "w"
-        ) as f:
+    conf = requester.config.download.user
+    if (n := conf.user_data_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(user.model_dump_json())
-    if requester.config.download.user_plans_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.user_plans_data_filename),
-            "wb",
-        ) as f:
-            f.write(TypeAdapter(list[models.PlanModel]).dump_json(user_plans))
+    if (n := conf.user_plans_data_filename) is not None:
+        with open(path.join(dir_path, n), "wb") as f:
+            f.write(TypeAdapter(list[PlanModel]).dump_json(user_plans))
 
-    if requester.config.download.user_about_text_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.user_about_text_filename),
-            "w",
-        ) as f:
+    if (n := conf.user_about_text_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(user.about)
 
     image_urls = {
@@ -143,58 +159,36 @@ def download_user(
 
 def download_post(
     requester: Requester,
-    account: models.AccountModel,
-    user: models.UserModel,
-    post_from_list: models.PostFromListModel,
-) -> tuple[models.PostModel, list[models.PostTagModel], models.PostVideosModel]:
+    post_from_list: PostFromListModel,
+    location_getter: LocationGetter,
+) -> tuple[PostModel, list[PostTagModel], PostVideosModel]:
     post = requester.get_post(post_from_list.id)
     post_tags = requester.get_post_tags(post_from_list.id)
     post_videos = requester.get_post_videos(post_from_list.id)
+    location_getter.update_data_dict("post_from_list", post_from_list)
+    location_getter.update_data_dict("post", post)
+    location_getter.update_data_dict("post_tags", post_tags)
+    location_getter.update_data_dict("post_videos", post_videos)
 
-    dir_path = generate_location_from_template(
-        requester.config.download.post_dir_path,
-        account,
-        user,
-        post_from_list,
-        post,
-        post_tags,
-        post_videos,
-    )
-    dir_path = path.join(
-        requester.config.download.downloads_dir_path,
-        dir_path,
-    )
+    dir_path = location_getter.get_post_dir_path()
     if not path.exists(dir_path):
         os.makedirs(dir_path)
 
-    if requester.config.download.post_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.post_data_filename), "w"
-        ) as f:
+    conf = requester.config.download.post
+    if (n := conf.post_data_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(post.model_dump_json())
-    if requester.config.download.post_from_list_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.post_from_list_data_filename),
-            "w",
-        ) as f:
+    if (n := conf.post_from_list_data_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(post_from_list.model_dump_json())
-    if requester.config.download.post_tags_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.post_tags_data_filename),
-            "wb",
-        ) as f:
-            f.write(TypeAdapter(list[models.PostTagModel]).dump_json(post_tags))
-    if requester.config.download.post_videos_data_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.post_videos_data_filename),
-            "w",
-        ) as f:
+    if (n := conf.post_tags_data_filename) is not None:
+        with open(path.join(dir_path, n), "wb") as f:
+            f.write(TypeAdapter(list[PostTagModel]).dump_json(post_tags))
+    if (n := conf.post_videos_data_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(post_videos.model_dump_json())
-    if requester.config.download.post_body_text_filename is not None:
-        with open(
-            path.join(dir_path, requester.config.download.post_body_text_filename),
-            "w",
-        ) as f:
+    if (n := conf.post_body_text_filename) is not None:
+        with open(path.join(dir_path, n), "w") as f:
             f.write(post.body)
 
     image_urls = {
@@ -235,6 +229,13 @@ def download_post(
             continue
         download_image(requester, image_url, dir_path)
 
+    if post_videos.trial is not None:
+        for i, video in enumerate(post_videos.trial):
+            download_video(requester, "trial", i, video, dir_path)
+    if post_videos.main is not None:
+        for i, video in enumerate(post_videos.main):
+            download_video(requester, "main", i, video, dir_path)
+
     return post, post_tags, post_videos
 
 
@@ -248,12 +249,17 @@ def main():
 
     username = sys.argv[1]
 
-    account, account_subscriptions = download_account(requester)
-    user, user_plans = download_user(requester, username, "username", account)
+    location_getter = LocationGetter(config)
 
+    if config.download.need_scrape_account:
+        download_account(requester, location_getter)
+    user, _ = download_user(requester, username, "username", location_getter)
     posts = requester.get_user_posts(user.id, 200, 1).data
+    progress_bar = tqdm(total=len(posts), desc="Downloading posts", unit="posts")
     for post_from_list in posts:
-        download_post(requester, account, user, post_from_list)
+        download_post(requester, post_from_list, location_getter)
+        progress_bar.update(1)
+    progress_bar.close()
 
 
 if __name__ == "__main__":

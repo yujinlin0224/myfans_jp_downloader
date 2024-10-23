@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel as BaseBasicModel
@@ -120,7 +121,7 @@ class SubscriptionModel(BaseModel):
     active_until: str
     active_until_i18n: str
     active_until_for_user_i18n: str
-    created_at: str
+    created_at: datetime
     humanized_created_at: Optional[str]
     user: UserModel
     kind_i18n: str
@@ -206,9 +207,9 @@ class PostBasicModel(BaseModel):
     status_label: Optional[str]
     body: str
     likes_count: int
-    published_at: str
-    publish_end_at: Optional[str]
-    pinned_at: Optional[str]
+    published_at: datetime
+    publish_end_at: Optional[datetime]
+    pinned_at: Optional[datetime]
     deleted_at_i18n: Optional[str]
     visible: bool
     available: bool
@@ -223,7 +224,7 @@ class PostFromListModel(PostBasicModel):
     humanized_publish_start_at: str
     user: UserInPostFromListModel
     post_images: list[PostPostImageModel]
-    publish_start_at: Optional[str]
+    publish_start_at: Optional[datetime]
     plan: Optional[PlanModel]
     current_single_plan: Optional[PostCurrentSinglePlanModel]
     plans: list[PlanInPostFromListModel]
@@ -236,7 +237,7 @@ class PostFromListModel(PostBasicModel):
 class PostModel(PostBasicModel):
     comments_count: int
     bookmarks_count: int
-    deleted_at: Optional[str]
+    deleted_at: Optional[datetime]
     user: UserInPostModel
     post_image: PostPostImageModel
     videos: PostVideosModel
